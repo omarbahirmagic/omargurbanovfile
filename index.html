@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="az">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dinamik Hava Proqnozu Atmosfer Modeli</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --panel-bg: #1e293b;
+            --accent: #38bdf8;
+            --text: #f8fafc;
+            --text-muted: #94a3b8;
+            --border: #334155;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text);
+            min-height: 100vh;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        header {
+            text-align: center;
+            padding: 10px;
+            background-color: var(--panel-bg);
+            border-radius: 10px;
+            border: 1px solid var(--border);
+        }
+
+        header h1 {
+            color: var(--accent);
+            font-size: 1.8rem;
+            margin-bottom: 5px;
+        }
+
+        .main-container {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 20px;
+        }
+
+        @media (max-width: 900px) {
+            .main-container {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .controls-panel {
+            background-color: var(--panel-bg);
+            padding: 20px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .control-group label {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .control-group input[type="range"] {
+            width: 100%;
+            accent-color: var(--accent);
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .metric-card {
+            background-color: rgba(255, 255, 255, 0.05);
+            padding: 10px;
+            border-radius: 8px;
+            text-align: center;
+            border: 1px solid var(--border);
+        }
+
+        .metric-card .value {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: var(--accent);
+        }
+
+        .metric-card .title {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .simulation-container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .canvas-card {
+            background-color: var(--panel-bg);
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            padding: 15px;
+            position: relative;
+        }
+
+        .canvas-card h3 {
+            font-size: 1rem;
+            margin-bottom: 10px;
+            color: var(--accent);
+        }
+
+        #weatherCanvas {
+            width: 100%;
+            height: 350px;
+            background-color: #020617;
+            border-radius: 6px;
+            cursor: crosshair;
+        }
+
+        .chart-card {
+            background-color: var(--panel-bg);
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            padding: 15px;
+            height: 300px;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Dinamik Hava Proqnozu və Atmosfer Simulyatoru</h1>
+        <p style="color: var(--text-muted); font-size: 0.9rem;">Termodinamika və Təzyiq Fərqlərinə Əsaslanan Real-Vaxt Modeli</p>
+    </header>
+
+    <div class="main-container">
+        <!-- İdarəetmə Paneli -->
+        <div class="controls-panel">
+            <h3>Atmosfer Parametrləri</h3>
+            
+            <div class="control-group">
+                <label>Səth Temperaturu (°C): <span id="tempVal">25</span></label>
+                <input type="range" id="tempInput" min="-10" max="45" value="25">
+            </div>
+
+            <div class="control-group">
+                <label>Mərkəzi Təzyiq (hPa): <span id="pressureVal">1013</span></label>
+                <input type="range" id="pressureInput" min="950" max="1050" value="1013">
+            </div>
+
+            <div class="control-group">
+                <label>Nisbi Rütubət (%): <span id="humidityVal">60</span></label>
+                <input type="range" id="humidityInput" min="10" max="100" value="60">
+            </div>
+
+            <div class="control-group">
+                <label>Koriolis Effekti (Enlik): <span id="coriolisVal">45</span>°</label>
+                <input type="range" id="coriolisInput" min="0" max="90" value="45">
+            </div>
+
+            <hr style="border-color: var(--border);">
+
+            <h3>Hesablanmış Göstəricilər</h3>
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="title">Şeh Nöqtəsi</div>
+                    <div class="value" id="dewPointMetric">16.7°C</div>
+                </div>
+                <div class="metric-card">
+                    <div class="title">Buludluq</div>
+                    <div class="value" id="cloudMetric">45%</div>
+                </div>
+                <div class="metric-card">
+                    <div class="title">Külək Sürəti</div>
+                    <div class="value" id="windSpeedMetric">12 km/s</div>
+                </div>
+                <div class="metric-card">
+                    <div class="title">Fırtına Riski</div>
+                    <div class="value" id="stormMetric">Aşağı</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Vizualizasiya Zonası -->
+        <div class="simulation-container">
+            <div class="canvas-card">
+                <h3>Külək Axınları və Təzyiq Meydanı (Siklon / Antisiklon)</h3>
+                <canvas id="weatherCanvas"></canvas>
+            </div>
+
+            <div class="chart-card">
+                <canvas id="forecastChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Canvas və Simulyasiya Məntiqi ---
+        const canvas = document.getElementById('weatherCanvas');
+        const ctx = canvas.getContext('2d');
+
+        function resizeCanvas() {
+            canvas.width = canvas.parentElement.clientWidth - 30;
+            canvas.height = 350;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        // Zərrəciklər (Külək axını üçün)
+        const numParticles = 800;
+        const particles = [];
+
+        for (let i = 0; i < numParticles; i++) {
+            particles.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                vx: 0,
+                vy: 0,
+                life: Math.random() * 100
+            });
+        }
+
+        // Təzyiq mərkəzinin koordinatları (İstifadəçi kliklə dəyişə bilər)
+        let pressureCenter = {
+            x: canvas.width / 2,
+            y: canvas.height / 2
+        };
+
+        canvas.addEventListener('click', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            pressureCenter.x = e.clientX - rect.left;
+            pressureCenter.y = e.clientY - rect.top;
+        });
+
+        // Parametr İnputları
+        const tempInput = document.getElementById('tempInput');
+        const pressureInput = document.getElementById('pressureInput');
+        const humidityInput = document.getElementById('humidityInput');
+        const coriolisInput = document.getElementById('coriolisInput');
+
+        function getPhysicsParameters() {
+            return {
+                temp: parseFloat(tempInput.value),
+                pressure: parseFloat(pressureInput.value),
+                humidity: parseFloat(humidityInput.value),
+                coriolis: parseFloat(coriolisInput.value) / 90
+            };
+        }
+
+        // Simulyasiya Dövrü (Animation Loop)
+        function animate() {
+            const params = getPhysicsParameters();
+            
+            // Yarımsəffaf arxa fon (iz effekti üçün)
+            ctx.fillStyle = 'rgba(2, 6, 23, 0.15)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Təzyiq mərkəzini çək
+            ctx.beginPath();
+            ctx.arc(pressureCenter.x, pressureCenter.y, 15, 0, Math.PI * 2);
+            const isLowPressure = params.pressure < 1013;
+            ctx.fillStyle = isLowPressure ? 'rgba(239, 68, 68, 0.5)' : 'rgba(59, 130, 246, 0.5)';
+            ctx.fill();
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 12px sans-serif';
+            ctx.fillText(isLowPressure ? 'L' : 'H', pressureCenter.x - 4, pressureCenter.y + 4);
+
+            // Zərrəcikləri yenilə və çək
+            particles.forEach(p => {
+                const dx = pressureCenter.x - p.x;
+                const dy = pressureCenter.y - p.y;
+                const dist = Math.sqrt(dx * dx + dy * dy) + 1;
+
+                // Gradiyent qüvvəsi (Təzyiq fərqindən doğan)
+                const pressureDiff = (1013 - params.pressure) * 0.05;
+                let force = (pressureDiff / dist) * 2;
+
+                // Koriolis fırlanma qüvvəsi
+                const rotX = -dy / dist * params.coriolis * 2;
+                const rotY = dx / dist * params.coriolis * 2;
+
+                if (params.pressure < 1013) {
+                    // Aşağı təzyiq (Siklon - mərkəzə doğru və fırlanan)
+                    p.vx += (dx / dist) * force + rotX;
+                    p.vy += (dy / dist) * force + rotY;
+                } else {
+                    // Yüksək təzyiq (Antisiklon - mərkəzdən kənara)
+                    const absForce = Math.abs(force);
+                    p.vx -= (dx / dist) * absForce - rotX;
+                    p.vy -= (dy / dist) * absForce - rotY;
+                }
+
+                // Sürtünmə
+                p.vx *= 0.95;
+                p.vy *= 0.95;
+
+                // Mövqeni dəyiş
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life -= 0.5;
+
+                // Sərhəd nəzarəti
+                if (p.x < 0 || p.x > canvas.width || p.y < 0 || p.y > canvas.height || p.life <= 0) {
+                    p.x = Math.random() * canvas.width;
+                    p.y = Math.random() * canvas.height;
+                    p.vx = 0;
+                    p.vy = 0;
+                    p.life = Math.random() * 100 + 50;
+                }
+
+                // Rəng (Temperaturdan asılı olaraq)
+                const speed = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
+                const hue = Math.max(0, Math.min(240, 240 - (params.temp + 10) * 4));
+                ctx.strokeStyle = `hsl(${hue}, 80%, ${Math.min(100, 40 + speed * 15)}%)`;
+                ctx.lineWidth = 1.5;
+
+                ctx.beginPath();
+                ctx.moveTo(p.x, p.y);
+                ctx.lineTo(p.x - p.vx * 2, p.y - p.vy * 2);
+                ctx.stroke();
+            });
+
+            requestAnimationFrame(animate);
+        }
+
+        animate();
+
+        // --- Meteoroloji Formullar və Metriklərin Hesablanması ---
+        function calculateMetrics() {
+            const T = parseFloat(tempInput.value);
+            const P = parseFloat(pressureInput.value);
+            const RH = parseFloat(humidityInput.value);
+
+            // Şeh Nöqtəsi (Magnus formulu ilə)
+            const a = 17.27;
+            const b = 237.7;
+            const alpha = ((a * T) / (b + T)) + Math.log(RH / 100.0);
+            const dewPoint = (b * alpha) / (a - alpha);
+
+            // Buludluq faizi
+            const cloudiness = Math.min(100, Math.max(0, (RH - 30) * 1.4 + (1013 - P) * 0.5));
+
+            // Külək sürəti (Təzyiq gradiyentinə əsasən)
+            const windSpeed = Math.round(Math.abs(1013 - P) * 1.2 + (T > 30 ? 5 : 2));
+
+            // Fırtına Riski
+            let stormRisk = "Aşağı";
+            if (P < 995 && RH > 75 && T > 20) {
+                stormRisk = "Yüksək";
+            } else if (P < 1005 && RH > 60) {
+                stormRisk = "Orta";
+            }
+
+            // Arayüzü yenilə
+            document.getElementById('tempVal').innerText = T;
+            document.getElementById('pressureVal').innerText = P;
+            document.getElementById('humidityVal').innerText = RH;
+            document.getElementById('coriolisVal').innerText = coriolisInput.value;
+
+            document.getElementById('dewPointMetric').innerText = dewPoint.toFixed(1) + '°C';
+            document.getElementById('cloudMetric').innerText = Math.round(cloudiness) + '%';
+            document.getElementById('windSpeedMetric').innerText = windSpeed + ' km/s';
+            document.getElementById('stormMetric').innerText = stormRisk;
+
+            updateChart(T, P, RH);
+        }
+
+        // --- Qrafik (Chart.js) İntegrasiyası ---
+        const chartCtx = document.getElementById('forecastChart').getContext('2d');
+        const forecastChart = new Chart(chartCtx, {
+            type: 'line',
+            data: {
+                labels: ['00:00', '03:00', '06:00', '09:00', '12:00', '15:00', '18:00', '21:00'],
+                datasets: [
+                    {
+                        label: 'Proqnozlaşdırılan Temp. (°C)',
+                        data: [],
+                        borderColor: '#38bdf8',
+                        backgroundColor: 'rgba(56, 189, 248, 0.1)',
+                        fill: true,
+                        tension: 0.4
+                    },
+                    {
+                        label: 'Yağıntı Ehtimalı (%)',
+                        data: [],
+                        borderColor: '#818cf8',
+                        borderDash: [5, 5],
+                        tension: 0.4
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        grid: { color: '#334155' },
+                        ticks: { color: '#94a3b8' }
+                    },
+                    x: {
+                        grid: { color: '#334155' },
+                        ticks: { color: '#94a3b8' }
+                    }
+                },
+                plugins: {
+                    legend: { labels: { color: '#f8fafc' } }
+                }
+            }
+        });
+
+        function updateChart(baseTemp, pressure, humidity) {
+            const tempData = [];
+            const rainData = [];
+
+            for (let i = 0; i < 8; i++) {
+                // Günlük sinus temperatur dalğalanması
+                const hourFactor = Math.sin((i - 2) * (Math.PI / 4)); 
+                const tempVariation = baseTemp + hourFactor * 4;
+                tempData.push(tempVariation.toFixed(1));
+
+                // Yağıntı dinamikası
+                const precip = Math.min(100, Math.max(0, (humidity - 40) * 1.2 + (1013 - pressure) * 0.8 + (i > 3 ? 10 : 0)));
+                rainData.push(Math.round(precip));
+            }
+
+            forecastChart.data.datasets[0].data = tempData;
+            forecastChart.data.datasets[1].data = rainData;
+            forecastChart.update();
+        }
+
+        // Dinamik Hadisə Dinləyiciləri
+        [tempInput, pressureInput, humidityInput, coriolisInput].forEach(input => {
+            input.addEventListener('input', calculateMetrics);
+        });
+
+        // İlk işəsalma
+        calculateMetrics();
+    </script>
+</body>
+</html>
